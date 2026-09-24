@@ -11,10 +11,11 @@
 
     <application
         android:allowBackup="true"
-        android:label="Blackbox Recorder"
+        android:icon="@drawable/app_logo"
+        android:label="Blackbox Audio"
+        android:roundIcon="@drawable/app_logo"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar"
-        tools:targetApi="34">
+        android:theme="@style/Theme.AppCompat.Light.NoActionBar">
 
         <!-- 앱 실행 시 켜지는 메인 화면 -->
         <activity
