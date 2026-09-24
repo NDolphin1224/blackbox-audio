@@ -38,6 +38,9 @@ class RecordService : Service() {
 
     private var currentFile: File? = null
     private var previousFile: File? = null
+    
+    // 스트림이 닫힐 때 영구 보관 파일로 변경하도록 지시하는 플래그
+    private var markCurrentAsEvent = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -96,23 +99,33 @@ class RecordService : Service() {
             while (isRecording) {
                 val currentTime = System.currentTimeMillis()
 
-                // 1분(60,000ms)마다 배터리 및 용량 체크 (Failsafe)
                 if (currentTime - lastFailsafeCheck > 60000) {
                     if (isFailsafeTriggered()) {
                         isRecording = false
-                        break // 루프를 탈출해 파일 스트림을 안전하게 닫고 종료
+                        break
                     }
                     lastFailsafeCheck = currentTime
                 }
                 
                 if (fos == null || currentTime - startTime >= chunkDurationMs) {
                     fos?.close()
-                    currentFile?.let { updateWavHeader(it, totalAudioLen) }
+                    currentFile?.let { 
+                        updateWavHeader(it, totalAudioLen)
+                        
+                        // 스트림이 완전히 닫힌 후 안전하게 EVENT_로 이름 변경
+                        if (markCurrentAsEvent) {
+                            val newFile = File(it.parent, it.name.replace("REC_", "EVENT_"))
+                            if (it.renameTo(newFile)) {
+                                currentFile = newFile
+                            }
+                        }
+                    }
                     
                     previousFile = currentFile
                     manageStorage()
 
                     currentFile = createNewFile()
+                    markCurrentAsEvent = false // 새 파일 생성 시 플래그 초기화
                     fos = FileOutputStream(currentFile)
                     startTime = currentTime
                     totalAudioLen = 0L
@@ -126,11 +139,16 @@ class RecordService : Service() {
                     totalAudioLen += read
                 }
             }
-            // 정상 종료든 안전 종료든 파일을 닫고 헤더를 기록함
-            fos?.close()
-            currentFile?.let { updateWavHeader(it, totalAudioLen) }
             
-            // Failsafe로 인한 자동 종료일 경우 서비스 완전 종료 처리
+            fos?.close()
+            currentFile?.let { 
+                updateWavHeader(it, totalAudioLen)
+                if (markCurrentAsEvent) {
+                    val newFile = File(it.parent, it.name.replace("REC_", "EVENT_"))
+                    it.renameTo(newFile)
+                }
+            }
+            
             if (!isRecording) {
                 stopSelf()
             }
@@ -140,14 +158,12 @@ class RecordService : Service() {
     }
 
     private fun isFailsafeTriggered(): Boolean {
-        // 1. 남은 용량 체크 (500MB 이하일 때)
         val freeSpace = getExternalFilesDir(null)?.freeSpace ?: 0L
         if (freeSpace < 500 * 1024 * 1024L) {
             notifyFailsafe("저장 공간 부족(500MB 이하)으로 안전 종료되었습니다.")
             return true
         }
 
-        // 2. 배터리 상태 체크 (5% 이하일 때)
         val batteryStatus: Intent? = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         val level = batteryStatus?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
         val scale = batteryStatus?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
@@ -170,6 +186,7 @@ class RecordService : Service() {
     private fun saveBookmark() {
         var count = 0
         
+        // 이전 파일은 이미 스트림이 닫혀 있으므로 즉시 이름 변경 가능
         previousFile?.let {
             if (it.exists() && it.name.startsWith("REC_")) {
                 val newFile = File(it.parent, it.name.replace("REC_", "EVENT_"))
@@ -180,18 +197,14 @@ class RecordService : Service() {
             }
         }
         
-        currentFile?.let {
-            if (it.exists() && it.name.startsWith("REC_")) {
-                val newFile = File(it.parent, it.name.replace("REC_", "EVENT_"))
-                if (it.renameTo(newFile)) {
-                    currentFile = newFile
-                    count++
-                }
-            }
+        // 현재 파일은 스트림 락(Lock)을 방지하기 위해 예약만 걸어둠
+        if (currentFile != null && !markCurrentAsEvent) {
+            markCurrentAsEvent = true
+            count++
         }
         
         Handler(Looper.getMainLooper()).post {
-            Toast.makeText(applicationContext, "중요 순간 ${count}개 파일이 영구 보관 처리되었습니다.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(applicationContext, "순간 저장: ${count}개 구간이 영구 보관됩니다.", Toast.LENGTH_SHORT).show()
         }
     }
 
