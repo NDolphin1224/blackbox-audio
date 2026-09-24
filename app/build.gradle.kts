@@ -25,7 +25,8 @@ android {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
-    // 끊김 없는 오디오 재생을 위한 Media3 (ExoPlayer)
     implementation("androidx.media3:media3-exoplayer:1.2.1")
     implementation("androidx.media3:media3-session:1.2.1")
+    // ExoPlayer 기본 컨트롤러 UI 라이브러리 추가
+    implementation("androidx.media3:media3-ui:1.2.1")
 }
