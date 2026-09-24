@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.DownloadManager
 import android.content.ContentValues
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -59,11 +60,21 @@ class PlaybackActivity : Activity() {
         btnBack.setOnClickListener { finish() }
         
         btnOpenFolder.setOnClickListener {
-            // 안드로이드 기본 다운로드 폴더 열기 명령
             try {
-                startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS))
+                // 문서 제공자 시스템을 통해 BlackBoxAudio 폴더로 다이렉트 접근 시도
+                val uri = Uri.parse("content://com.android.externalstorage.documents/document/primary%3ADownload%2FBlackBoxAudio")
+                val intent = Intent(Intent.ACTION_VIEW)
+                intent.setDataAndType(uri, "vnd.android.document/directory")
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                startActivity(intent)
             } catch (e: Exception) {
-                Toast.makeText(this, "파일 관리자 앱을 실행할 수 없습니다.", Toast.LENGTH_SHORT).show()
+                try {
+                    // 실패 시 기본 다운로드 폴더 열기로 우회
+                    startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS))
+                    Toast.makeText(this, "전용 폴더를 열 수 없어 기본 폴더를 열었습니다. BlackBoxAudio 폴더를 확인해 주세요.", Toast.LENGTH_LONG).show()
+                } catch (e2: Exception) {
+                    Toast.makeText(this, "파일 관리자 앱을 찾을 수 없습니다.", Toast.LENGTH_SHORT).show()
+                }
             }
         }
         
@@ -74,7 +85,8 @@ class PlaybackActivity : Activity() {
 
     private fun initializePlayer() {
         val dir = File(getExternalFilesDir(null), "records")
-        val files = dir.listFiles()?.filter { it.name.startsWith("REC_") }?.sortedBy { it.lastModified() }
+        // REC_ 파일과 EVENT_ 파일을 모두 스캔해서 엮음
+        val files = dir.listFiles()?.filter { it.name.startsWith("REC_") || it.name.startsWith("EVENT_") }?.sortedBy { it.lastModified() }
 
         if (files.isNullOrEmpty()) {
             Toast.makeText(this, "저장된 녹음 파일이 없습니다.", Toast.LENGTH_SHORT).show()
@@ -116,7 +128,7 @@ class PlaybackActivity : Activity() {
         Thread {
             try {
                 val dir = File(getExternalFilesDir(null), "records")
-                val files = dir.listFiles()?.filter { it.name.startsWith("REC_") }?.sortedBy { it.lastModified() } ?: return@Thread
+                val files = dir.listFiles()?.filter { it.name.startsWith("REC_") || it.name.startsWith("EVENT_") }?.sortedBy { it.lastModified() } ?: return@Thread
 
                 val tempMergedFile = File(cacheDir, "Temp_Merged.wav")
                 val fos = FileOutputStream(tempMergedFile)
@@ -139,11 +151,9 @@ class PlaybackActivity : Activity() {
 
                 updateWavHeader(tempMergedFile, totalAudioLen)
 
-                // 44.1kHz, 16bit Mono 환경에서 1초의 바이트 양은 88200 바이트
                 val totalSeconds = totalAudioLen / 88200
                 val calculatedEndTimeMs = recordStartTimeMs + (totalSeconds * 1000)
                 
-                // 파일명 규칙 생성 (예: BBA_20260924_1800_1900.wav)
                 val startFormat = SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault()).format(Date(recordStartTimeMs))
                 val endFormat = SimpleDateFormat("HHmm", Locale.getDefault()).format(Date(calculatedEndTimeMs))
                 val finalFileName = "BBA_${startFormat}_${endFormat}.wav"
@@ -181,7 +191,6 @@ class PlaybackActivity : Activity() {
                 }
             }
         } else {
-            // 안드로이드 9 이하: Downloads 안에 BlackBoxAudio 폴더 생성
             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
             val appDir = File(downloadsDir, "BlackBoxAudio")
             if (!appDir.exists()) appDir.mkdirs()
@@ -196,34 +205,23 @@ class PlaybackActivity : Activity() {
         }
     }
 
-    // WAV 헤더 작성 코드는 기존과 동일
     private fun updateWavHeader(file: File, totalAudioLen: Long) {
         val sampleRate = 44100
         val channels = 1
         val byteRate = 16 * sampleRate * channels / 8.toLong()
         val totalDataLen = totalAudioLen + 36
-
         val header = ByteArray(44)
-        header[0] = 'R'.code.toByte(); header[1] = 'I'.code.toByte()
-        header[2] = 'F'.code.toByte(); header[3] = 'F'.code.toByte()
-        header[4] = (totalDataLen and 0xff).toByte(); header[5] = ((totalDataLen shr 8) and 0xff).toByte()
-        header[6] = ((totalDataLen shr 16) and 0xff).toByte(); header[7] = ((totalDataLen shr 24) and 0xff).toByte()
-        header[8] = 'W'.code.toByte(); header[9] = 'A'.code.toByte()
-        header[10] = 'V'.code.toByte(); header[11] = 'E'.code.toByte()
-        header[12] = 'f'.code.toByte(); header[13] = 'm'.code.toByte()
-        header[14] = 't'.code.toByte(); header[15] = ' '.code.toByte()
+        header[0] = 'R'.code.toByte(); header[1] = 'I'.code.toByte(); header[2] = 'F'.code.toByte(); header[3] = 'F'.code.toByte()
+        header[4] = (totalDataLen and 0xff).toByte(); header[5] = ((totalDataLen shr 8) and 0xff).toByte(); header[6] = ((totalDataLen shr 16) and 0xff).toByte(); header[7] = ((totalDataLen shr 24) and 0xff).toByte()
+        header[8] = 'W'.code.toByte(); header[9] = 'A'.code.toByte(); header[10] = 'V'.code.toByte(); header[11] = 'E'.code.toByte()
+        header[12] = 'f'.code.toByte(); header[13] = 'm'.code.toByte(); header[14] = 't'.code.toByte(); header[15] = ' '.code.toByte()
         header[16] = 16; header[17] = 0; header[18] = 0; header[19] = 0
         header[20] = 1; header[21] = 0; header[22] = channels.toByte(); header[23] = 0
-        header[24] = (sampleRate.toLong() and 0xff).toByte(); header[25] = ((sampleRate.toLong() shr 8) and 0xff).toByte()
-        header[26] = ((sampleRate.toLong() shr 16) and 0xff).toByte(); header[27] = ((sampleRate.toLong() shr 24) and 0xff).toByte()
-        header[28] = (byteRate and 0xff).toByte(); header[29] = ((byteRate shr 8) and 0xff).toByte()
-        header[30] = ((byteRate shr 16) and 0xff).toByte(); header[31] = ((byteRate shr 24) and 0xff).toByte()
+        header[24] = (sampleRate.toLong() and 0xff).toByte(); header[25] = ((sampleRate.toLong() shr 8) and 0xff).toByte(); header[26] = ((sampleRate.toLong() shr 16) and 0xff).toByte(); header[27] = ((sampleRate.toLong() shr 24) and 0xff).toByte()
+        header[28] = (byteRate and 0xff).toByte(); header[29] = ((byteRate shr 8) and 0xff).toByte(); header[30] = ((byteRate shr 16) and 0xff).toByte(); header[31] = ((byteRate shr 24) and 0xff).toByte()
         header[32] = (channels * 16 / 8).toByte(); header[33] = 0; header[34] = 16; header[35] = 0
-        header[36] = 'd'.code.toByte(); header[37] = 'a'.code.toByte()
-        header[38] = 't'.code.toByte(); header[39] = 'a'.code.toByte()
-        header[40] = (totalAudioLen and 0xff).toByte(); header[41] = ((totalAudioLen shr 8) and 0xff).toByte()
-        header[42] = ((totalAudioLen shr 16) and 0xff).toByte(); header[43] = ((totalAudioLen shr 24) and 0xff).toByte()
-
+        header[36] = 'd'.code.toByte(); header[37] = 'a'.code.toByte(); header[38] = 't'.code.toByte(); header[39] = 'a'.code.toByte()
+        header[40] = (totalAudioLen and 0xff).toByte(); header[41] = ((totalAudioLen shr 8) and 0xff).toByte(); header[42] = ((totalAudioLen shr 16) and 0xff).toByte(); header[43] = ((totalAudioLen shr 24) and 0xff).toByte()
         RandomAccessFile(file, "rw").use { raf ->
             raf.seek(0)
             raf.write(header)
@@ -241,7 +239,8 @@ class PlaybackActivity : Activity() {
 
     private fun parseTimeToMillis(fileName: String): Long {
         return try {
-            val timeString = fileName.replace("REC_", "").replace(".wav", "")
+            // REC_ 또는 EVENT_ 접두사를 모두 지우고 파싱
+            val timeString = fileName.replace("REC_", "").replace("EVENT_", "").replace(".wav", "")
             val format = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
             val date = format.parse(timeString)
             date?.time ?: System.currentTimeMillis()

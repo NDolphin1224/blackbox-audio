@@ -24,11 +24,11 @@ class MainActivity : Activity() {
         checkAndRequestPermissions()
 
         val btnRecord = findViewById<Button>(R.id.btnRecord)
+        val btnBookmark = findViewById<Button>(R.id.btnBookmark)
         val statusText = findViewById<TextView>(R.id.statusText)
         val btnPlay = findViewById<Button>(R.id.btnPlay)
         val btnSettings = findViewById<Button>(R.id.btnSettings)
 
-        // 현재 설정된 시간 표시
         updateStatusText(statusText)
 
         btnRecord.setOnClickListener {
@@ -44,6 +44,17 @@ class MainActivity : Activity() {
             }
         }
 
+        // 보관 버튼 로직
+        btnBookmark.setOnClickListener {
+            if (isServiceRunning) {
+                val intent = Intent(this, RecordService::class.java)
+                intent.action = "BOOKMARK"
+                startService(intent)
+            } else {
+                Toast.makeText(this, "녹음이 켜져 있을 때만 사용할 수 있습니다.", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         btnPlay.setOnClickListener {
             val playIntent = Intent(this, PlaybackActivity::class.java)
             startActivity(playIntent)
@@ -51,7 +62,7 @@ class MainActivity : Activity() {
 
         btnSettings.setOnClickListener {
             if (isServiceRunning) {
-                Toast.makeText(this, "녹음 중에는 설정을 변경할 수 없어.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "녹음 중에는 설정을 변경할 수 없습니다.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             showSettingsDialog(statusText)
@@ -86,12 +97,13 @@ class MainActivity : Activity() {
 
     private fun checkOldRecordsAndStart(btnRecord: Button, statusText: TextView) {
         val dir = File(getExternalFilesDir(null), "records")
-        val files = dir.listFiles()?.filter { it.name.startsWith("REC_") }
+        // REC_와 EVENT_ 파일을 모두 스캔
+        val files = dir.listFiles()?.filter { it.name.startsWith("REC_") || it.name.startsWith("EVENT_") }
 
         if (!files.isNullOrEmpty()) {
             AlertDialog.Builder(this)
                 .setTitle("녹음 초기화")
-                .setMessage("새로 녹음을 시작하면 기존 녹음본이 모두 삭제됩니다. 계속할까?")
+                .setMessage("새로 녹음을 시작하면 기존 녹음본(영구 보관 포함)이 모두 삭제됩니다. 계속하시겠습니까?")
                 .setPositiveButton("확인") { _, _ ->
                     files.forEach { it.delete() }
                     startRecordingService(btnRecord, statusText)
@@ -118,19 +130,15 @@ class MainActivity : Activity() {
 
     private fun checkAndRequestPermissions() {
         val permissions = mutableListOf(Manifest.permission.RECORD_AUDIO)
-        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
         }
-        // 안드로이드 9(API 28) 이하일 경우 파일 쓰기 권한 추가
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
             permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
-
         val missingPermissions = permissions.filter {
             checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
         }
-
         if (missingPermissions.isNotEmpty()) {
             requestPermissions(missingPermissions.toTypedArray(), 100)
         }

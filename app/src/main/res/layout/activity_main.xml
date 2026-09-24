@@ -45,6 +45,26 @@
         android:textColor="#FFFFFF"
         android:textSize="18sp"
         android:textStyle="bold" />
+        <Button
+        android:id="@+id/btnRecord"
+        android:layout_width="match_parent"
+        android:layout_height="65dp"
+        android:layout_marginBottom="16dp"
+        android:backgroundTint="#F44336"
+        android:text="24시간 녹음 시작"
+        android:textColor="#FFFFFF"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+    <Button
+        android:id="@+id/btnBookmark"
+        android:layout_width="match_parent"
+        android:layout_height="65dp"
+        android:layout_marginBottom="16dp"
+        android:backgroundTint="#FF9800"
+        android:text="중요 순간 영구 보관 (직전/현재)"
+        android:textColor="#FFFFFF"
+        android:textSize="18sp"
+        android:textStyle="bold" />
     <Button
         android:id="@+id/btnSettings"
         android:layout_width="match_parent"
