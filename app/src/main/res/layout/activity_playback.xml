@@ -1,22 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:background="#1E1E1E"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <!-- 상단 아이콘 (마이크 모양 기본 이미지) -->
+    <ImageView
+        android:layout_width="80dp"
+        android:layout_height="80dp"
+        android:layout_marginBottom="24dp"
+        android:src="@android:drawable/ic_btn_speak_now"
+        app:tint="#4CAF50" />
 
     <TextView
         android:id="@+id/tvFileInfo"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="16dp"
+        android:layout_marginBottom="48dp"
+        android:gravity="center"
         android:text="녹음 파일 찾는 중..."
-        android:textSize="16sp" />
+        android:textColor="#FFFFFF"
+        android:textSize="18sp"
+        android:textStyle="bold" />
 
-    <!-- 구글 공식 ExoPlayer 컨트롤러 UI -->
+    <!-- 오디오 전용으로 속성을 제어한 PlayerView -->
     <androidx.media3.ui.PlayerView
         android:id="@+id/playerView"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_weight="1" />
+        android:layout_height="wrap_content"
+        app:show_buffering="never"
+        app:surface_type="none" 
+        app:use_artwork="false" />
 
 </LinearLayout>

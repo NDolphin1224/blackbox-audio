@@ -2,32 +2,48 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="#F5F7FA"
     android:gravity="center"
     android:orientation="vertical"
-    android:padding="24dp">
+    android:padding="32dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:text="Blackbox Audio"
+        android:textColor="#333333"
+        android:textSize="28sp"
+        android:textStyle="bold" />
 
     <TextView
         android:id="@+id/statusText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="대기 중"
-        android:textSize="24sp"
-        android:textStyle="bold"
-        android:layout_marginBottom="32dp"/>
+        android:layout_marginBottom="48dp"
+        android:text="현재 대기 중입니다"
+        android:textColor="#666666"
+        android:textSize="16sp" />
 
     <Button
         android:id="@+id/btnRecord"
         android:layout_width="match_parent"
-        android:layout_height="60dp"
+        android:layout_height="65dp"
+        android:layout_marginBottom="16dp"
+        android:backgroundTint="#F44336"
         android:text="24시간 녹음 시작"
+        android:textColor="#FFFFFF"
         android:textSize="18sp"
-        android:layout_marginBottom="16dp"/>
+        android:textStyle="bold" />
 
     <Button
         android:id="@+id/btnPlay"
         android:layout_width="match_parent"
-        android:layout_height="60dp"
-        android:text="녹음본 듣기"
-        android:textSize="18sp"/>
+        android:layout_height="65dp"
+        android:backgroundTint="#2196F3"
+        android:text="녹음 뷰어 열기"
+        android:textColor="#FFFFFF"
+        android:textSize="18sp"
+        android:textStyle="bold" />
 
 </LinearLayout>
