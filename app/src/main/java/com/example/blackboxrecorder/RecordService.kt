@@ -6,10 +6,12 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -34,7 +36,6 @@ class RecordService : Service() {
     private val chunkDurationMs = 10 * 60 * 1000L
     private var maxFilesCount = 18
 
-    // 직전 파일과 현재 파일을 추적
     private var currentFile: File? = null
     private var previousFile: File? = null
 
@@ -89,18 +90,26 @@ class RecordService : Service() {
         var fos: FileOutputStream? = null
         var startTime = 0L
         var totalAudioLen = 0L
+        var lastFailsafeCheck = 0L
 
         try {
             while (isRecording) {
                 val currentTime = System.currentTimeMillis()
+
+                // 1분(60,000ms)마다 배터리 및 용량 체크 (Failsafe)
+                if (currentTime - lastFailsafeCheck > 60000) {
+                    if (isFailsafeTriggered()) {
+                        isRecording = false
+                        break // 루프를 탈출해 파일 스트림을 안전하게 닫고 종료
+                    }
+                    lastFailsafeCheck = currentTime
+                }
                 
                 if (fos == null || currentTime - startTime >= chunkDurationMs) {
                     fos?.close()
                     currentFile?.let { updateWavHeader(it, totalAudioLen) }
                     
-                    // 파일이 넘어가면 현재 파일을 이전 파일로 밀어냄
                     previousFile = currentFile
-
                     manageStorage()
 
                     currentFile = createNewFile()
@@ -117,14 +126,47 @@ class RecordService : Service() {
                     totalAudioLen += read
                 }
             }
+            // 정상 종료든 안전 종료든 파일을 닫고 헤더를 기록함
             fos?.close()
             currentFile?.let { updateWavHeader(it, totalAudioLen) }
+            
+            // Failsafe로 인한 자동 종료일 경우 서비스 완전 종료 처리
+            if (!isRecording) {
+                stopSelf()
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
-    // 파일 이름만 변경하여 영구 보관 (스트림 중단 없음)
+    private fun isFailsafeTriggered(): Boolean {
+        // 1. 남은 용량 체크 (500MB 이하일 때)
+        val freeSpace = getExternalFilesDir(null)?.freeSpace ?: 0L
+        if (freeSpace < 500 * 1024 * 1024L) {
+            notifyFailsafe("저장 공간 부족(500MB 이하)으로 안전 종료되었습니다.")
+            return true
+        }
+
+        // 2. 배터리 상태 체크 (5% 이하일 때)
+        val batteryStatus: Intent? = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val level = batteryStatus?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale = batteryStatus?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+        if (level != -1 && scale != -1) {
+            val batteryPct = level * 100 / scale.toFloat()
+            if (batteryPct <= 5.0f) {
+                notifyFailsafe("배터리 부족(5% 이하)으로 녹음이 안전 종료되었습니다.")
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun notifyFailsafe(message: String) {
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(applicationContext, message, Toast.LENGTH_LONG).show()
+        }
+    }
+
     private fun saveBookmark() {
         var count = 0
         
@@ -162,7 +204,6 @@ class RecordService : Service() {
 
     private fun manageStorage() {
         val dir = File(getExternalFilesDir(null), "records")
-        // EVENT_ 파일은 절대 지워지지 않도록 삭제 리스트에서 제외함 (핵심 로직)
         val files = dir.listFiles()?.filter { it.name.startsWith("REC_") }?.sortedBy { it.lastModified() } ?: return
         
         if (files.size >= maxFilesCount) {

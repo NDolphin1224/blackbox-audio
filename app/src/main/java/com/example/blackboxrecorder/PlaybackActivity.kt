@@ -4,7 +4,6 @@ import android.app.Activity
 import android.app.DownloadManager
 import android.content.ContentValues
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -60,21 +59,15 @@ class PlaybackActivity : Activity() {
         btnBack.setOnClickListener { finish() }
         
         btnOpenFolder.setOnClickListener {
+            // 안드로이드 9 및 다양한 제조사 환경에서 가장 안전한 다운로드 폴더 호출
+            val intent = Intent(DownloadManager.ACTION_VIEW_DOWNLOADS)
+            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
             try {
-                // 문서 제공자 시스템을 통해 BlackBoxAudio 폴더로 다이렉트 접근 시도
-                val uri = Uri.parse("content://com.android.externalstorage.documents/document/primary%3ADownload%2FBlackBoxAudio")
-                val intent = Intent(Intent.ACTION_VIEW)
-                intent.setDataAndType(uri, "vnd.android.document/directory")
-                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 startActivity(intent)
+                Toast.makeText(this, "다운로드 폴더를 열었습니다. 'BlackBoxAudio' 폴더를 확인해 주세요.", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
-                try {
-                    // 실패 시 기본 다운로드 폴더 열기로 우회
-                    startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS))
-                    Toast.makeText(this, "전용 폴더를 열 수 없어 기본 폴더를 열었습니다. BlackBoxAudio 폴더를 확인해 주세요.", Toast.LENGTH_LONG).show()
-                } catch (e2: Exception) {
-                    Toast.makeText(this, "파일 관리자 앱을 찾을 수 없습니다.", Toast.LENGTH_SHORT).show()
-                }
+                // 다운로드 관리자가 맵핑되지 않은 기기를 위한 Failsafe
+                Toast.makeText(this, "기본 파일 관리자 앱을 열어 Download/BlackBoxAudio 폴더를 확인해 주세요.", Toast.LENGTH_LONG).show()
             }
         }
         
@@ -85,7 +78,6 @@ class PlaybackActivity : Activity() {
 
     private fun initializePlayer() {
         val dir = File(getExternalFilesDir(null), "records")
-        // REC_ 파일과 EVENT_ 파일을 모두 스캔해서 엮음
         val files = dir.listFiles()?.filter { it.name.startsWith("REC_") || it.name.startsWith("EVENT_") }?.sortedBy { it.lastModified() }
 
         if (files.isNullOrEmpty()) {
@@ -239,7 +231,6 @@ class PlaybackActivity : Activity() {
 
     private fun parseTimeToMillis(fileName: String): Long {
         return try {
-            // REC_ 또는 EVENT_ 접두사를 모두 지우고 파싱
             val timeString = fileName.replace("REC_", "").replace("EVENT_", "").replace(".wav", "")
             val format = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
             val date = format.parse(timeString)
