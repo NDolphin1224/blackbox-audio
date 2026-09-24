@@ -8,7 +8,6 @@
     android:orientation="vertical"
     android:padding="24dp">
 
-    <!-- 상단 아이콘 (마이크 모양 기본 이미지) -->
     <ImageView
         android:layout_width="80dp"
         android:layout_height="80dp"
@@ -20,20 +19,58 @@
         android:id="@+id/tvFileInfo"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="48dp"
+        android:layout_marginBottom="24dp"
         android:gravity="center"
         android:text="녹음 파일 찾는 중..."
         android:textColor="#FFFFFF"
         android:textSize="18sp"
         android:textStyle="bold" />
 
-    <!-- 오디오 전용으로 속성을 제어한 PlayerView -->
+    <!-- 실제 녹음 시각 표시 영역 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/tvStartTime"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="start"
+            android:text="시작 --:--"
+            android:textColor="#AAAAAA"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/tvCurrentRealTime"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="--:--:--"
+            android:textColor="#4CAF50"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvEndTime"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="end"
+            android:text="종료 --:--"
+            android:textColor="#AAAAAA"
+            android:textSize="14sp" />
+    </LinearLayout>
+
     <androidx.media3.ui.PlayerView
         android:id="@+id/playerView"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         app:show_buffering="never"
-        app:surface_type="none" 
+        app:surface_type="none"
         app:use_artwork="false" />
 
 </LinearLayout>
