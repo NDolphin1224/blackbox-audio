@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.media.AudioFormat
@@ -23,21 +24,25 @@ class RecordService : Service() {
     private var isRecording = false
     private var audioRecord: AudioRecord? = null
     
-    // 오디오 표준 규격 (44.1kHz, Mono, 16bit)
     private val sampleRate = 44100
     private val channelConfig = AudioFormat.CHANNEL_IN_MONO
     private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
     private val bufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
     
-    // 10분 단위 저장 (밀리초 변환)
     private val chunkDurationMs = 10 * 60 * 1000L
-    // 최대 3시간 (10분 x 18개)
-    private val maxFilesCount = 18
+    
+    // 설정값에 따라 동적으로 바뀔 변수
+    private var maxFilesCount = 18
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == "START") {
+            // 저장된 설정값을 읽어와서 최대 유지 파일 개수 계산 (1시간 = 10분 * 6개)
+            val prefs = getSharedPreferences("BlackboxPrefs", Context.MODE_PRIVATE)
+            val maxHours = prefs.getInt("max_hours", 3)
+            maxFilesCount = maxHours * 6
+
             startForegroundService()
             startRecording()
         } else if (intent?.action == "STOP") {
@@ -59,7 +64,6 @@ class RecordService : Service() {
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .build()
             
-        // Android 14 이상 마이크 포그라운드 권한 명시
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
         } else {
@@ -75,7 +79,6 @@ class RecordService : Service() {
         audioRecord = AudioRecord(MediaRecorder.AudioSource.MIC, sampleRate, channelConfig, audioFormat, bufferSize)
         audioRecord?.startRecording()
 
-        // 메인 UI가 멈추지 않도록 별도의 백그라운드 스레드에서 파일 쓰기 진행
         Thread { writeAudioData() }.start()
     }
 
@@ -90,27 +93,20 @@ class RecordService : Service() {
             while (isRecording) {
                 val currentTime = System.currentTimeMillis()
                 
-                // 10분이 지났거나 첫 시작일 때 새 파일 생성 로직
                 if (fos == null || currentTime - startTime >= chunkDurationMs) {
-                    
-                    // 이전 파일 닫고 WAV 헤더 덮어쓰기 (재생 가능하게 만듦)
                     fos?.close()
                     currentFile?.let { updateWavHeader(it, totalAudioLen) }
 
-                    // 저장소 용량/개수 관리 (오래된 것 삭제)
                     manageStorage()
 
-                    // 새 파일 생성
                     currentFile = createNewFile()
                     fos = FileOutputStream(currentFile)
                     startTime = currentTime
                     totalAudioLen = 0L
                     
-                    // 44바이트 빈 공간(WAV 헤더 자리) 먼저 확보
                     fos.write(ByteArray(44), 0, 44)
                 }
 
-                // 마이크 데이터 읽어서 파일에 쓰기
                 val read = audioRecord?.read(data, 0, bufferSize) ?: 0
                 if (read > 0) {
                     fos.write(data, 0, read)
@@ -118,7 +114,6 @@ class RecordService : Service() {
                 }
             }
             
-            // 정지 버튼 누르면 마지막 파일 정리
             fos?.close()
             currentFile?.let { updateWavHeader(it, totalAudioLen) }
             
@@ -136,9 +131,9 @@ class RecordService : Service() {
 
     private fun manageStorage() {
         val dir = File(getExternalFilesDir(null), "records")
-        val files = dir.listFiles()?.sortedBy { it.lastModified() } ?: return
+        val files = dir.listFiles()?.filter { it.name.startsWith("REC_") }?.sortedBy { it.lastModified() } ?: return
         
-        // 파일 개수가 18개(3시간) 이상이면 가장 오래된(first) 파일 삭제
+        // 설정된 최대 개수 이상이면 가장 오래된 것 삭제
         if (files.size >= maxFilesCount) {
             files.first().delete()
         }
@@ -153,7 +148,6 @@ class RecordService : Service() {
         stopSelf()
     }
 
-    // 파일 생성 완료 후 파일 맨 앞으로 이동해 표준 WAV 헤더 규격을 작성하는 함수
     private fun updateWavHeader(file: File, totalAudioLen: Long) {
         val totalDataLen = totalAudioLen + 36
         val longSampleRate = sampleRate.toLong()
