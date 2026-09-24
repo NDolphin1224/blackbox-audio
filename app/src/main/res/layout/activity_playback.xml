@@ -7,7 +7,6 @@
     android:orientation="vertical"
     android:padding="24dp">
 
-    <!-- 상단 버튼 바 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -40,12 +39,13 @@
             android:textColor="#FFFFFF"
             android:textStyle="bold" />
 
+        <!-- 버튼 이름 변경됨 -->
         <Button
             android:id="@+id/btnExport"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:backgroundTint="#4CAF50"
-            android:text="합쳐서 내보내기"
+            android:text="내보내기"
             android:textColor="#FFFFFF"
             android:textStyle="bold" />
     </LinearLayout>

@@ -39,12 +39,13 @@ class MainActivity : Activity() {
                 intent.action = "STOP"
                 startService(intent)
                 btnRecord.text = "24시간 녹음 시작"
-                updateStatusText(statusText)
+                
+                // 실행 순서 변경: 서비스 실행 상태를 false로 먼저 바꾼 뒤에 텍스트를 업데이트해야 함
                 isServiceRunning = false
+                updateStatusText(statusText)
             }
         }
 
-        // 보관 버튼 로직
         btnBookmark.setOnClickListener {
             if (isServiceRunning) {
                 val intent = Intent(this, RecordService::class.java)
@@ -97,7 +98,6 @@ class MainActivity : Activity() {
 
     private fun checkOldRecordsAndStart(btnRecord: Button, statusText: TextView) {
         val dir = File(getExternalFilesDir(null), "records")
-        // REC_와 EVENT_ 파일을 모두 스캔
         val files = dir.listFiles()?.filter { it.name.startsWith("REC_") || it.name.startsWith("EVENT_") }
 
         if (!files.isNullOrEmpty()) {
