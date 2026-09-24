@@ -118,12 +118,19 @@ class MainActivity : Activity() {
 
     private fun checkAndRequestPermissions() {
         val permissions = mutableListOf(Manifest.permission.RECORD_AUDIO)
+        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
         }
+        // 안드로이드 9(API 28) 이하일 경우 파일 쓰기 권한 추가
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
+            permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        }
+
         val missingPermissions = permissions.filter {
             checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
         }
+
         if (missingPermissions.isNotEmpty()) {
             requestPermissions(missingPermissions.toTypedArray(), 100)
         }
