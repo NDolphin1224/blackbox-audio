@@ -15,17 +15,6 @@
         android:src="@android:drawable/ic_btn_speak_now"
         android:tint="#4CAF50" />
 
-    <TextView
-        android:id="@+id/tvFileInfo"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="24dp"
-        android:gravity="center"
-        android:text="녹음 파일 찾는 중..."
-        android:textColor="#FFFFFF"
-        android:textSize="18sp"
-        android:textStyle="bold" />
-
     <!-- 실제 녹음 시각 표시 영역 -->
     <LinearLayout
         android:layout_width="match_parent"
