@@ -2,18 +2,19 @@ package com.example.blackboxrecorder
 
 import android.Manifest
 import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.widget.Button
 import android.widget.TextView
-import android.widget.Toast
 
 class MainActivity : Activity() {
 
+    private var isServiceRunning = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // 방금 만든 XML UI를 화면에 연결
         setContentView(R.layout.activity_main)
 
         checkAndRequestPermissions()
@@ -22,15 +23,33 @@ class MainActivity : Activity() {
         val statusText = findViewById<TextView>(R.id.statusText)
 
         btnRecord.setOnClickListener {
-            // TODO: 나중에 여기에 24시간 백그라운드 서비스(AudioRecord) 실행 코드를 넣을 거야
-            Toast.makeText(this, "녹음 서비스 준비 중", Toast.LENGTH_SHORT).show()
+            val intent = Intent(this, RecordService::class.java)
+            
+            if (!isServiceRunning) {
+                // 백그라운드 서비스 시작 명령
+                intent.action = "START"
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(intent)
+                } else {
+                    startService(intent)
+                }
+                btnRecord.text = "녹음 중지"
+                statusText.text = "24시간 녹음 가동 중..."
+                isServiceRunning = true
+            } else {
+                // 백그라운드 서비스 종료 명령
+                intent.action = "STOP"
+                startService(intent)
+                btnRecord.text = "24시간 녹음 시작"
+                statusText.text = "대기 중"
+                isServiceRunning = false
+            }
         }
     }
 
     private fun checkAndRequestPermissions() {
         val permissions = mutableListOf(Manifest.permission.RECORD_AUDIO)
         
-        // Android 13(API 33) 이상에서는 알림 권한 필수
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
         }
