@@ -1,7 +1,9 @@
 package com.example.blackboxrecorder
 
 import android.app.Activity
+import android.app.DownloadManager
 import android.content.ContentValues
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -9,7 +11,6 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.widget.Button
-import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
 import androidx.media3.common.MediaItem
@@ -51,10 +52,21 @@ class PlaybackActivity : Activity() {
         tvCurrentRealTime = findViewById(R.id.tvCurrentRealTime)
         tvEndTime = findViewById(R.id.tvEndTime)
 
-        val btnBack = findViewById<ImageButton>(R.id.btnBack)
+        val btnBack = findViewById<Button>(R.id.btnBack)
+        val btnOpenFolder = findViewById<Button>(R.id.btnOpenFolder)
         val btnExport = findViewById<Button>(R.id.btnExport)
 
         btnBack.setOnClickListener { finish() }
+        
+        btnOpenFolder.setOnClickListener {
+            // 안드로이드 기본 다운로드 폴더 열기 명령
+            try {
+                startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS))
+            } catch (e: Exception) {
+                Toast.makeText(this, "파일 관리자 앱을 실행할 수 없습니다.", Toast.LENGTH_SHORT).show()
+            }
+        }
+        
         btnExport.setOnClickListener { exportMergedAudio() }
 
         initializePlayer()
@@ -65,7 +77,7 @@ class PlaybackActivity : Activity() {
         val files = dir.listFiles()?.filter { it.name.startsWith("REC_") }?.sortedBy { it.lastModified() }
 
         if (files.isNullOrEmpty()) {
-            Toast.makeText(this, "저장된 녹음 파일이 없어.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "저장된 녹음 파일이 없습니다.", Toast.LENGTH_SHORT).show()
             finish()
             return
         }
@@ -99,26 +111,23 @@ class PlaybackActivity : Activity() {
     private fun exportMergedAudio() {
         if (isExporting) return
         isExporting = true
-        Toast.makeText(this, "파일을 병합 중이야. 잠시만 기다려...", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, "파일을 병합 중입니다. 잠시만 기다려주세요...", Toast.LENGTH_LONG).show()
 
         Thread {
             try {
                 val dir = File(getExternalFilesDir(null), "records")
                 val files = dir.listFiles()?.filter { it.name.startsWith("REC_") }?.sortedBy { it.lastModified() } ?: return@Thread
 
-                // 임시 병합 파일 생성
                 val tempMergedFile = File(cacheDir, "Temp_Merged.wav")
                 val fos = FileOutputStream(tempMergedFile)
-                
-                // 44바이트 헤더 공간 비워두기
                 fos.write(ByteArray(44))
 
                 var totalAudioLen = 0L
-                val buffer = ByteArray(1024 * 64) // 64KB 버퍼로 고속 복사
+                val buffer = ByteArray(1024 * 64)
 
                 for (file in files) {
                     val fis = FileInputStream(file)
-                    fis.skip(44) // 원본 파일들의 44바이트 헤더를 건너뜀
+                    fis.skip(44)
                     var read: Int
                     while (fis.read(buffer).also { read = it } != -1) {
                         fos.write(buffer, 0, read)
@@ -128,37 +137,40 @@ class PlaybackActivity : Activity() {
                 }
                 fos.close()
 
-                // 완성된 전체 길이를 바탕으로 맨 앞에 통합 WAV 헤더 덮어쓰기
                 updateWavHeader(tempMergedFile, totalAudioLen)
 
-                // 휴대폰의 '다운로드' 폴더로 복사
-                saveToPublicDownloads(tempMergedFile)
+                // 44.1kHz, 16bit Mono 환경에서 1초의 바이트 양은 88200 바이트
+                val totalSeconds = totalAudioLen / 88200
+                val calculatedEndTimeMs = recordStartTimeMs + (totalSeconds * 1000)
                 
-                tempMergedFile.delete() // 임시 파일 삭제
+                // 파일명 규칙 생성 (예: BBA_20260924_1800_1900.wav)
+                val startFormat = SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault()).format(Date(recordStartTimeMs))
+                val endFormat = SimpleDateFormat("HHmm", Locale.getDefault()).format(Date(calculatedEndTimeMs))
+                val finalFileName = "BBA_${startFormat}_${endFormat}.wav"
+
+                saveToPublicDownloads(tempMergedFile, finalFileName)
+                tempMergedFile.delete()
 
                 runOnUiThread {
-                    Toast.makeText(this, "다운로드(Downloads) 폴더에 저장 완료!", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "BlackBoxAudio 폴더에 성공적으로 저장되었습니다!", Toast.LENGTH_LONG).show()
                     isExporting = false
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
                 runOnUiThread {
-                    Toast.makeText(this, "병합 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "병합을 실패했습니다: ${e.message}", Toast.LENGTH_SHORT).show()
                     isExporting = false
                 }
             }
         }.start()
     }
 
-    private fun saveToPublicDownloads(sourceFile: File) {
-        val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault()).format(Date())
-        val finalFileName = "Blackbox_Merged_$timestamp.wav"
-
+    private fun saveToPublicDownloads(sourceFile: File, finalFileName: String) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, finalFileName)
                 put(MediaStore.MediaColumns.MIME_TYPE, "audio/wav")
-                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/BlackBoxAudio")
             }
             val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
             uri?.let {
@@ -169,10 +181,12 @@ class PlaybackActivity : Activity() {
                 }
             }
         } else {
-            // 안드로이드 9(API 28) 이하를 위한 직접 파일 복사 방식
+            // 안드로이드 9 이하: Downloads 안에 BlackBoxAudio 폴더 생성
             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            if (!downloadsDir.exists()) downloadsDir.mkdirs()
-            val destFile = File(downloadsDir, finalFileName)
+            val appDir = File(downloadsDir, "BlackBoxAudio")
+            if (!appDir.exists()) appDir.mkdirs()
+            
+            val destFile = File(appDir, finalFileName)
             
             FileInputStream(sourceFile).use { inStream ->
                 FileOutputStream(destFile).use { outStream ->
@@ -182,6 +196,7 @@ class PlaybackActivity : Activity() {
         }
     }
 
+    // WAV 헤더 작성 코드는 기존과 동일
     private fun updateWavHeader(file: File, totalAudioLen: Long) {
         val sampleRate = 44100
         val channels = 1
