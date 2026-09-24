@@ -45,6 +45,11 @@ class MainActivity : Activity() {
                 isServiceRunning = false
             }
         }
+        val btnPlay = findViewById<Button>(R.id.btnPlay)
+        btnPlay.setOnClickListener {
+            val playIntent = Intent(this, PlaybackActivity::class.java)
+            startActivity(playIntent)
+        }
     }
 
     private fun checkAndRequestPermissions() {

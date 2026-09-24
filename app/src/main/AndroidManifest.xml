@@ -30,6 +30,7 @@
             android:name=".RecordService"
             android:foregroundServiceType="microphone"
             android:exported="false" />
+        <activity android:name=".PlaybackActivity" />
 
     </application>
 </manifest>
