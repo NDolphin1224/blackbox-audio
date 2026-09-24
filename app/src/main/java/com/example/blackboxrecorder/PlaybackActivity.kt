@@ -78,7 +78,7 @@ class PlaybackActivity : Activity() {
 
     private fun initializePlayer() {
         val dir = File(getExternalFilesDir(null), "records")
-        val files = dir.listFiles()?.filter { it.name.startsWith("REC_") || it.name.startsWith("EVENT_") }?.sortedBy { it.lastModified() }
+        val files = dir.listFiles()?.filter { it.name.startsWith("REC_") }?.sortedBy { it.lastModified() }
 
         if (files.isNullOrEmpty()) {
             Toast.makeText(this, "저장된 녹음 파일이 없습니다.", Toast.LENGTH_SHORT).show()

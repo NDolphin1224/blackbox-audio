@@ -19,6 +19,7 @@ import android.os.Looper
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.RandomAccessFile
 import java.text.SimpleDateFormat
@@ -38,9 +39,6 @@ class RecordService : Service() {
 
     private var currentFile: File? = null
     private var previousFile: File? = null
-    
-    // 스트림이 닫힐 때 영구 보관 파일로 변경하도록 지시하는 플래그
-    private var markCurrentAsEvent = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -55,7 +53,7 @@ class RecordService : Service() {
         } else if (intent?.action == "STOP") {
             stopRecording()
         } else if (intent?.action == "BOOKMARK") {
-            saveBookmark()
+            saveBookmarkInstantExport()
         }
         return START_STICKY
     }
@@ -109,23 +107,12 @@ class RecordService : Service() {
                 
                 if (fos == null || currentTime - startTime >= chunkDurationMs) {
                     fos?.close()
-                    currentFile?.let { 
-                        updateWavHeader(it, totalAudioLen)
-                        
-                        // 스트림이 완전히 닫힌 후 안전하게 EVENT_로 이름 변경
-                        if (markCurrentAsEvent) {
-                            val newFile = File(it.parent, it.name.replace("REC_", "EVENT_"))
-                            if (it.renameTo(newFile)) {
-                                currentFile = newFile
-                            }
-                        }
-                    }
+                    currentFile?.let { updateWavHeader(it, totalAudioLen) }
                     
                     previousFile = currentFile
                     manageStorage()
 
                     currentFile = createNewFile()
-                    markCurrentAsEvent = false // 새 파일 생성 시 플래그 초기화
                     fos = FileOutputStream(currentFile)
                     startTime = currentTime
                     totalAudioLen = 0L
@@ -141,19 +128,96 @@ class RecordService : Service() {
             }
             
             fos?.close()
-            currentFile?.let { 
-                updateWavHeader(it, totalAudioLen)
-                if (markCurrentAsEvent) {
-                    val newFile = File(it.parent, it.name.replace("REC_", "EVENT_"))
-                    it.renameTo(newFile)
-                }
-            }
+            currentFile?.let { updateWavHeader(it, totalAudioLen) }
             
             if (!isRecording) {
                 stopSelf()
             }
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }
+
+    // 이름 변경(영구보관) 대신, 즉시 외부 폴더로 병합해서 추출하는 로직
+    private fun saveBookmarkInstantExport() {
+        Toast.makeText(applicationContext, "순간 저장을 시작합니다...", Toast.LENGTH_SHORT).show()
+        
+        val filesToExport = listOfNotNull(previousFile, currentFile).filter { it.exists() }
+        
+        if (filesToExport.isEmpty()) {
+            Toast.makeText(applicationContext, "저장할 녹음 데이터가 없습니다.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        Thread {
+            try {
+                val tempMergedFile = File(cacheDir, "Temp_Instant.wav")
+                val fos = FileOutputStream(tempMergedFile)
+                fos.write(ByteArray(44))
+
+                var totalAudioLen = 0L
+                val buffer = ByteArray(1024 * 64)
+
+                for (file in filesToExport) {
+                    val fis = FileInputStream(file)
+                    fis.skip(44) // 기존 파일들의 헤더 건너뛰기
+                    var read: Int
+                    // 파일이 실시간으로 쓰이고 있어도, 디스크에 기록된 현재 시점까지만 긁어옴
+                    while (fis.read(buffer).also { read = it } != -1) {
+                        fos.write(buffer, 0, read)
+                        totalAudioLen += read
+                    }
+                    fis.close()
+                }
+                fos.close()
+
+                updateWavHeader(tempMergedFile, totalAudioLen)
+
+                val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                val finalFileName = "BBA_Instant_$timestamp.wav"
+
+                saveToPublicDownloads(tempMergedFile, finalFileName)
+                tempMergedFile.delete()
+
+                Handler(Looper.getMainLooper()).post {
+                    Toast.makeText(applicationContext, "순간 저장 완료! BlackBoxAudio 폴더를 확인해 주세요.", Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Handler(Looper.getMainLooper()).post {
+                    Toast.makeText(applicationContext, "순간 저장에 실패했습니다.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }.start()
+    }
+
+    private fun saveToPublicDownloads(sourceFile: File, finalFileName: String) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, finalFileName)
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "audio/wav")
+                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/BlackBoxAudio")
+            }
+            val uri = contentResolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            uri?.let {
+                contentResolver.openOutputStream(it).use { outStream ->
+                    java.io.FileInputStream(sourceFile).use { inStream ->
+                        inStream.copyTo(outStream!!)
+                    }
+                }
+            }
+        } else {
+            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val appDir = File(downloadsDir, "BlackBoxAudio")
+            if (!appDir.exists()) appDir.mkdirs()
+            
+            val destFile = File(appDir, finalFileName)
+            
+            java.io.FileInputStream(sourceFile).use { inStream ->
+                java.io.FileOutputStream(destFile).use { outStream ->
+                    inStream.copyTo(outStream)
+                }
+            }
         }
     }
 
@@ -180,31 +244,6 @@ class RecordService : Service() {
     private fun notifyFailsafe(message: String) {
         Handler(Looper.getMainLooper()).post {
             Toast.makeText(applicationContext, message, Toast.LENGTH_LONG).show()
-        }
-    }
-
-    private fun saveBookmark() {
-        var count = 0
-        
-        // 이전 파일은 이미 스트림이 닫혀 있으므로 즉시 이름 변경 가능
-        previousFile?.let {
-            if (it.exists() && it.name.startsWith("REC_")) {
-                val newFile = File(it.parent, it.name.replace("REC_", "EVENT_"))
-                if (it.renameTo(newFile)) {
-                    previousFile = newFile
-                    count++
-                }
-            }
-        }
-        
-        // 현재 파일은 스트림 락(Lock)을 방지하기 위해 예약만 걸어둠
-        if (currentFile != null && !markCurrentAsEvent) {
-            markCurrentAsEvent = true
-            count++
-        }
-        
-        Handler(Looper.getMainLooper()).post {
-            Toast.makeText(applicationContext, "순간 저장: ${count}개 구간이 영구 보관됩니다.", Toast.LENGTH_SHORT).show()
         }
     }
 

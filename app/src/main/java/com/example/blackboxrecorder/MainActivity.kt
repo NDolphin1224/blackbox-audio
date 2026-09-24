@@ -39,8 +39,6 @@ class MainActivity : Activity() {
                 intent.action = "STOP"
                 startService(intent)
                 btnRecord.text = "24시간 녹음 시작"
-                
-                // 실행 순서 변경: 서비스 실행 상태를 false로 먼저 바꾼 뒤에 텍스트를 업데이트해야 함
                 isServiceRunning = false
                 updateStatusText(statusText)
             }
@@ -98,13 +96,15 @@ class MainActivity : Activity() {
 
     private fun checkOldRecordsAndStart(btnRecord: Button, statusText: TextView) {
         val dir = File(getExternalFilesDir(null), "records")
-        val files = dir.listFiles()?.filter { it.name.startsWith("REC_") || it.name.startsWith("EVENT_") }
+        // 이전 로직의 찌꺼기(EVENT_ 파일)까지 포함해 샌드박스 내 모든 파일 스캔
+        val files = dir.listFiles()
 
         if (!files.isNullOrEmpty()) {
             AlertDialog.Builder(this)
                 .setTitle("녹음 초기화")
-                .setMessage("새로 녹음을 시작하면 기존 녹음본(영구 보관 포함)이 모두 삭제됩니다. 계속하시겠습니까?")
+                .setMessage("새로 녹음을 시작하면 기존 임시 녹음 데이터가 모두 삭제됩니다. 계속하시겠습니까?")
                 .setPositiveButton("확인") { _, _ ->
+                    // 샌드박스 내 모든 파일 강제 삭제 (초기화)
                     files.forEach { it.delete() }
                     startRecordingService(btnRecord, statusText)
                 }
