@@ -138,7 +138,46 @@ class RecordService : Service() {
         }
     }
 
-    // 이름 변경(영구보관) 대신, 즉시 외부 폴더로 병합해서 추출하는 로직
+    private fun getNextInstantIndex(): Int {
+        var maxIndex = 0
+        val pattern = Regex("^BBA_Instant(\\d+)_.*\\.wav\$")
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val projection = arrayOf(android.provider.MediaStore.MediaColumns.DISPLAY_NAME)
+            val selection = "${android.provider.MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?"
+            val selectionArgs = arrayOf("%BlackBoxAudio%")
+            
+            try {
+                contentResolver.query(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, projection, selection, selectionArgs, null)?.use { cursor ->
+                    val nameColumn = cursor.getColumnIndexOrThrow(android.provider.MediaStore.MediaColumns.DISPLAY_NAME)
+                    while (cursor.moveToNext()) {
+                        val displayName = cursor.getString(nameColumn) ?: continue
+                        val match = pattern.find(displayName)
+                        if (match != null) {
+                            val index = match.groupValues[1].toIntOrNull() ?: 0
+                            if (index > maxIndex) maxIndex = index
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        } else {
+            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val appDir = File(downloadsDir, "BlackBoxAudio")
+            if (appDir.exists()) {
+                appDir.listFiles()?.forEach { file ->
+                    val match = pattern.find(file.name)
+                    if (match != null) {
+                        val index = match.groupValues[1].toIntOrNull() ?: 0
+                        if (index > maxIndex) maxIndex = index
+                    }
+                }
+            }
+        }
+        return maxIndex + 1
+    }
+
     private fun saveBookmarkInstantExport() {
         Toast.makeText(applicationContext, "순간 저장을 시작합니다...", Toast.LENGTH_SHORT).show()
         
@@ -160,9 +199,8 @@ class RecordService : Service() {
 
                 for (file in filesToExport) {
                     val fis = FileInputStream(file)
-                    fis.skip(44) // 기존 파일들의 헤더 건너뛰기
+                    fis.skip(44)
                     var read: Int
-                    // 파일이 실시간으로 쓰이고 있어도, 디스크에 기록된 현재 시점까지만 긁어옴
                     while (fis.read(buffer).also { read = it } != -1) {
                         fos.write(buffer, 0, read)
                         totalAudioLen += read
@@ -173,8 +211,9 @@ class RecordService : Service() {
 
                 updateWavHeader(tempMergedFile, totalAudioLen)
 
+                val nextIndex = getNextInstantIndex()
                 val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-                val finalFileName = "BBA_Instant_$timestamp.wav"
+                val finalFileName = "BBA_Instant${nextIndex}_$timestamp.wav"
 
                 saveToPublicDownloads(tempMergedFile, finalFileName)
                 tempMergedFile.delete()
