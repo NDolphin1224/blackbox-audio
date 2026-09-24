@@ -15,7 +15,7 @@
         android:label="Blackbox Audio"
         android:roundIcon="@drawable/app_logo"
         android:supportsRtl="true"
-        android:theme="@style/Theme.AppCompat.Light.NoActionBar">
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
         <!-- 앱 실행 시 켜지는 메인 화면 -->
         <activity
